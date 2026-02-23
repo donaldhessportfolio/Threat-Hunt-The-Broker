@@ -75,3 +75,44 @@ This hunt was conducted using Microsoft Defender Advanced Hunting telemetry, lev
 By correlating endpoint, network, and behavioral telemetry, the investigation reconstructs the attacker’s progression across the full cyber kill chain — from phishing-based initial access through credential theft, persistence establishment, lateral movement, and reflective in-memory execution.
 
 The sections that follow document each phase of the intrusion in detail, supported by queries, telemetry evidence, and attacker tradecraft analysis.
+
+---
+
+## 🌐 Scope & Environment
+
+This investigation was conducted within a controlled lab environment designed to simulate a modern enterprise endpoint ecosystem monitored by Microsoft Defender for Endpoint.
+
+The environment consisted of multiple Windows-based systems configured to emulate a realistic corporate network, including user workstations and internal infrastructure components. All telemetry used during the investigation was sourced from Microsoft Defender Advanced Hunting, enabling cross-domain visibility into endpoint, network, identity, and in-memory activity.
+
+### 🖥️ Systems in Scope
+- **as-pc1** — Initial compromise point and primary attacker foothold  
+- **as-pc2** — First lateral movement target and user activity pivot  
+- **as-srv** — Internal file server hosting sensitive shared data  
+
+### 👤 Identities Observed
+- **sophie.turner** — Initially compromised user account leveraged for early-stage execution and credential access  
+- **david.mitchell** — Secondary compromised account used for lateral authentication and persistence operations  
+
+### 🧠 Telemetry Sources
+The investigation leveraged multiple Defender telemetry domains to reconstruct attacker behavior:
+
+- Process execution and lineage telemetry (DeviceProcessEvents)  
+- Network communication artifacts (DeviceNetworkEvents)  
+- File system activity and staging behavior (DeviceFileEvents)  
+- Authentication and logon telemetry (DeviceLogonEvents)  
+- In-memory execution and reflective loading signals (DeviceEvents)  
+
+### 🎯 Investigation Scope
+
+The hunt focused on reconstructing attacker activity across the full intrusion lifecycle, including:
+
+- Initial access and payload execution  
+- Command-and-control communications  
+- Credential harvesting and registry hive dumping  
+- Persistence establishment and tool deployment  
+- Lateral movement across endpoints  
+- Data access and staging on internal infrastructure  
+- Anti-forensics and defense evasion techniques  
+- Reflective loading and in-memory credential theft  
+
+All findings were derived from Defender Advanced Hunting telemetry without reliance on external forensic tooling, emphasizing detection engineering and telemetry-driven threat hunting methodologies.
