@@ -275,4 +275,77 @@ The investigation highlights the importance of correlating endpoint, identity, a
 | Exfiltration Prep | Archive Staging (T1560), Data Bundling | 🟠 High | Compressed archive staged prior to potential exfiltration |
 | Fileless Activity | Reflective Loading + GhostPack Tooling | 🔴 Critical | SharpChrome executed in-memory via process injection |
 
+---
 
+## 📊 Executive Takeaway
+
+This intrusion represents a multi-stage hands-on-keyboard compromise combining phishing-based initial access, layered persistence, credential theft, and fileless in-memory exploitation across multiple hosts.
+
+**Key Findings**
+- Scope: Multi-host compromise across workstations and internal file server
+- Method: Phishing execution followed by LOLBin abuse and credential reuse
+- Persistence: AnyDesk deployment, scheduled tasks, masqueraded binaries, backdoor accounts
+- Data Impact: Sensitive financial data accessed and staged for potential exfiltration
+- Sophistication: Reflective loading and GhostPack tooling indicate advanced tradecraft
+
+**Critical Indicators**
+- Early log clearing shows deliberate anti-forensics behavior
+- Multi-layer persistence suggests long-term access intent
+- Native binary abuse allowed blending into legitimate activity
+- Reflective loading confirms fileless post-exploitation maturity
+- Process injection into trusted binaries enabled strong evasion
+
+**Business Impact**
+- Sensitive financial data accessed on internal infrastructure
+- Credential material harvested and staged locally
+- Multiple hosts persistently compromised
+- Rogue accounts and tasks increase long-term breach risk
+- High likelihood of continued access without remediation
+
+**Immediate Actions**
+- Reset all compromised credentials
+- Remove unauthorized persistence mechanisms
+- Perform full host triage across impacted systems
+- Hunt for reflective loading indicators environment-wide
+- Implement detections for LOLBin abuse and in-memory execution
+- Review outbound traffic for potential staged exfiltration
+
+Early detection of persistence layering and fileless execution is critical to disrupting adversaries leveraging legitimate tooling and in-memory tradecraft.
+
+---
+
+## ⏱️ Attack Timeline
+
+### January 15, 2026 — Initial Compromise
+**~05:08 UTC** — Phishing payload executed on as-pc1 (daniel_richardson_cv.pdf.exe)  
+**~05:10 UTC** — Windows logs cleared via wevtutil (anti-forensics)  
+**Early post-execution** — Outbound connections to attacker infrastructure established
+
+### Post-Exploitation
+**Credential harvesting** — SAM and SYSTEM registry hives dumped and staged locally  
+**Reconnaissance** — whoami, net view, and privilege discovery commands executed
+
+### Persistence Establishment
+**Remote access deployed** — AnyDesk installed with unattended access  
+**Persistence layering** — Scheduled tasks, masqueraded binaries, account manipulation observed
+
+### Lateral Movement
+**Failed attempts** — PsExec and WMIC used during early pivots  
+**Successful pivot** — Interactive RDP (mstsc.exe) enabled multi-host access  
+**Expansion** — Persistence observed across as-pc1, as-pc2, and as-srv
+
+### Data Collection
+**Server access** — Internal file server compromised  
+**Sensitive interaction** — Financial documents accessed and edited  
+**Attribution** — SMB telemetry ties access to as-pc2
+
+### Staging Phase
+**Archive creation** — Shares.7z created on file server  
+**Artifact hashing** — Unique SHA256 identified for staged data
+
+### Advanced Tradecraft
+**Reflective loading detected** — ClrUnbackedModuleLoaded telemetry observed  
+**Fileless credential theft** — GhostPack SharpChrome executed in memory  
+**Process injection** — SharpChrome injected into notepad.exe
+
+**Investigation Window:** January 15, 2026 – February 23, 2026
