@@ -116,3 +116,95 @@ The hunt focused on reconstructing attacker activity across the full intrusion l
 - Reflective loading and in-memory credential theft  
 
 All findings were derived from Defender Advanced Hunting telemetry without reliance on external forensic tooling, emphasizing detection engineering and telemetry-driven threat hunting methodologies.
+
+---
+
+## 📚 Table of Contents
+
+- [🧠 Hunt Overview](#-hunt-overview)
+- [🧬 MITRE ATT&CK Summary](#-mitre-attck-summary)
+- [🔥 Executive MITRE ATT&CK Heatmap](#-executive-mitre-attck-heatmap)
+- [📊 Executive Takeaway](#-executive-takeaway)
+- [⏱️ Attack Timeline](#️-attack-timeline)
+- [🔍 Flag Analysis](#-flag-analysis)
+  - Phase 1: Initial Access & Execution (Flags 1–5)
+  - Phase 2: Command & Control Infrastructure (Flags 6–8)
+  - Phase 3: Credential Access & Local Staging (Flags 9–11)
+  - Phase 4: Reconnaissance & Privilege Discovery (Flags 12–14)
+  - Phase 5: Persistence Establishment (Flags 15–20)
+  - Phase 6: Lateral Movement & Identity Abuse (Flags 21–27)
+  - Phase 7: Advanced Persistence & Backdoors (Flags 28–31)
+  - Phase 8: Data Collection & Staging (Flags 32–36)
+  - Phase 9: Defense Evasion & Fileless Execution (Flags 37–40)
+- [🚨 Detection Opportunities](#-detection-opportunities)
+- [🛡️ Defensive Takeaways](#️-defensive-takeaways)
+- [🧾 Final Assessment](#-final-assessment)
+- [📎 Analyst Notes](#-analyst-notes)
+
+---
+
+## 🧠 Hunt Overview
+
+This threat hunt reconstructed a full-spectrum hands-on-keyboard intrusion beginning with a phishing-based endpoint compromise and evolving into a multi-host attack involving credential theft, persistence hardening, lateral movement, and fileless in-memory exploitation.
+
+The intrusion originated from execution of a socially engineered payload disguised as a resume file on workstation **as-pc1**, which immediately transitioned into interactive attacker activity. Early behaviors included log tampering, outbound command-and-control communication, and use of native Windows utilities to establish situational awareness while blending into legitimate system activity.
+
+### Operational Characteristics
+
+**Hands-on-keyboard activity:**  
+Manual command execution using native utilities (whoami.exe, net.exe, reg.exe, schtasks.exe) indicating interactive operator control rather than automated malware execution.
+
+**Living-off-the-land tradecraft:**  
+Extensive abuse of legitimate Windows binaries (certutil, reg, net, schtasks, mstsc) to minimize detection and evade traditional signature-based defenses.
+
+**Layered persistence:**  
+Multiple concurrent persistence mechanisms including:
+- Legitimate remote access tooling (AnyDesk)
+- Scheduled task masquerading
+- Local account creation
+- Account reactivation
+- Binary renaming and staged payload execution
+
+**Stealth-focused operations:**  
+Evidence of deliberate defense evasion including:
+- Early event log clearing
+- Masqueraded binaries in user-writable directories
+- Off-disk reflective module loading
+- In-memory credential theft tooling
+
+---
+
+### Attack Progression
+
+**Initial compromise via phishing execution**  
+Execution of a double-extension payload (daniel_richardson_cv.pdf.exe) establishing the first foothold on as-pc1.
+
+**Immediate post-exploitation activity**  
+Rapid log clearing and outbound communications to attacker-controlled infrastructure, confirming active operator presence shortly after execution.
+
+**Credential harvesting and staging**  
+Registry hive dumping (SAM and SYSTEM) followed by local staging of credential artifacts in publicly writable directories.
+
+**Reconnaissance and privilege discovery**  
+Systematic enumeration of user context, network shares, and privileged group membership using native administrative utilities.
+
+**Persistence hardening phase**  
+Deployment of AnyDesk remote access tooling, unattended access configuration, scheduled task persistence, and creation of a service-style backdoor account.
+
+**Lateral movement across the environment**  
+Multi-method lateral movement attempts including PsExec, WMIC, and eventual interactive RDP pivots, enabling expansion from workstation foothold to additional endpoints and internal infrastructure.
+
+**Server access and data collection**  
+Compromise of an internal file server followed by access to sensitive financial documents and staged data collection activity.
+
+**Pre-exfiltration staging**  
+Creation of compressed archives containing collected data, indicating preparation for outbound data transfer.
+
+**Advanced defense evasion and fileless execution**  
+Reflective loading of in-memory GhostPack tooling (SharpChrome) injected into legitimate processes, enabling credential theft without leaving disk artifacts.
+
+---
+
+This hunt demonstrates how a single successful phishing execution can rapidly escalate into a multi-host intrusion involving layered persistence, credential abuse, and advanced defense evasion techniques.
+
+The investigation highlights the importance of correlating endpoint, identity, and in-memory telemetry to detect modern adversaries who rely heavily on legitimate tooling and fileless execution to evade traditional security controls.
