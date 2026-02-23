@@ -177,31 +177,31 @@ Evidence of deliberate defense evasion including:
 ### Attack Progression
 
 **Initial compromise via phishing execution**  
-Execution of a double-extension payload (daniel_richardson_cv.pdf.exe) establishing the first foothold on as-pc1.
+Double-extension payload (daniel_richardson_cv.pdf.exe) executed, establishing the initial foothold on as-pc1.
 
 **Immediate post-exploitation activity**  
-Rapid log clearing and outbound communications to attacker-controlled infrastructure, confirming active operator presence shortly after execution.
+Rapid log clearing and outbound communications confirmed active operator presence shortly after execution.
 
 **Credential harvesting and staging**  
-Registry hive dumping (SAM and SYSTEM) followed by local staging of credential artifacts in publicly writable directories.
+SAM and SYSTEM registry hives dumped and staged locally in publicly writable directories.
 
 **Reconnaissance and privilege discovery**  
-Systematic enumeration of user context, network shares, and privileged group membership using native administrative utilities.
+User context, network shares, and privileged group membership enumerated using native administrative utilities.
 
 **Persistence hardening phase**  
-Deployment of AnyDesk remote access tooling, unattended access configuration, scheduled task persistence, and creation of a service-style backdoor account.
+AnyDesk deployed with unattended access alongside scheduled tasks and a service-style backdoor account.
 
 **Lateral movement across the environment**  
-Multi-method lateral movement attempts including PsExec, WMIC, and eventual interactive RDP pivots, enabling expansion from workstation foothold to additional endpoints and internal infrastructure.
+PsExec and WMIC attempts followed by successful interactive RDP pivots enabled expansion across endpoints and infrastructure.
 
 **Server access and data collection**  
-Compromise of an internal file server followed by access to sensitive financial documents and staged data collection activity.
+Internal file server compromised with subsequent access to sensitive financial documents.
 
 **Pre-exfiltration staging**  
-Creation of compressed archives containing collected data, indicating preparation for outbound data transfer.
+Compressed archives created to bundle collected data for potential exfiltration.
 
 **Advanced defense evasion and fileless execution**  
-Reflective loading of in-memory GhostPack tooling (SharpChrome) injected into legitimate processes, enabling credential theft without leaving disk artifacts.
+Reflective loading of GhostPack SharpChrome into legitimate processes enabled in-memory credential theft without disk artifacts.
 
 ---
 
@@ -349,3 +349,5 @@ Early detection of persistence layering and fileless execution is critical to di
 **Process injection** — SharpChrome injected into notepad.exe
 
 **Investigation Window:** January 15, 2026 – February 23, 2026
+
+
