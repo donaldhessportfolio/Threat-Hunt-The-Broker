@@ -207,4 +207,72 @@ Reflective loading of in-memory GhostPack tooling (SharpChrome) injected into le
 
 This hunt demonstrates how a single successful phishing execution can rapidly escalate into a multi-host intrusion involving layered persistence, credential abuse, and advanced defense evasion techniques.
 
-The investigation highlights the importance of correlating endpoint, identity, and in-memory telemetry to detect modern adversaries who rely heavily on legitimate tooling and fileless execution to evade traditional security controls.
+The investigation highlights the importance of correlating endpoint, identity, and in-memory telemetry to detect modern adversaries who rely heavily on legitimate tooling and fileless execution to evade traditional security controls. 
+
+---
+
+## 🧬 MITRE ATT&CK Summary
+
+| Flag | Technique Category | MITRE ID | Priority | System |
+|------|-------------------|----------|----------|--------|
+| 1 | Initial Access – Phishing Payload Execution | T1566 | Critical | as-pc1 |
+| 2 | Malware Execution – User Execution | T1204 | Critical | as-pc1 |
+| 3 | Execution – User Execution via Explorer | T1204.002 | High | as-pc1 |
+| 4 | Execution – Native Process Launching | T1059 | Medium | as-pc1 |
+| 5 | Process Execution Context Discovery | T1057 | Medium | as-pc1 |
+| 6 | Command & Control – Application Layer Protocol | T1071 | Critical | as-pc1 |
+| 7 | Command & Control – Malware Beaconing | T1071 | Critical | as-pc1 |
+| 8 | Ingress Tool Transfer Infrastructure | T1105 | High | as-pc1 |
+| 9 | Credential Access – Registry Hive Dumping | T1003.002 | Critical | as-pc1 |
+| 10 | Credential Staging – Local File System | T1074.001 | High | as-pc1 |
+| 11 | Valid Account Abuse | T1078 | Critical | as-pc1 |
+| 12 | Discovery – User Context Enumeration | T1033 | Medium | as-pc1 |
+| 13 | Discovery – Network Share Enumeration | T1135 | High | as-pc1 |
+| 14 | Discovery – Privileged Group Enumeration | T1069.001 | High | as-pc1 |
+| 15 | Persistence – Remote Access Software | T1219 | Critical | as-pc1 |
+| 16 | Persistence Artifact – Tool Hash Identification | T1027 | Medium | as-pc1 |
+| 17 | Ingress Tool Transfer via LOLBin | T1105 | High | as-pc1 |
+| 18 | Persistence Validation via Config Access | T1547 | Medium | as-pc1 |
+| 19 | Persistence Hardening – Unattended Access | T1098 | Critical | as-pc1 |
+| 20 | Multi-Host Persistence Deployment | T1570 | Critical | as-pc1, as-pc2, as-srv |
+| 21 | Lateral Movement – Remote Execution Attempts | T1021 | High | as-pc1 |
+| 22 | Lateral Movement Target Enumeration | T1021 | High | as-pc2 |
+| 23 | Lateral Movement – Remote Desktop Pivot | T1021.001 | Critical | as-pc2 |
+| 24 | Lateral Movement Path Reconstruction | T1570 | Critical | Multi-host |
+| 25 | Lateral Authentication via Valid Accounts | T1078 | Critical | as-pc2, as-srv |
+| 26 | Account Manipulation – Activation | T1098 | High | as-pc2 |
+| 27 | Privileged Account Abuse | T1078 | Critical | as-pc2 |
+| 28 | Persistence – Scheduled Task | T1053.005 | Critical | Multi-host |
+| 29 | Defense Evasion – Binary Masquerading | T1036 | Critical | Multi-host |
+| 30 | Persistence Artifact Hashing | T1027 | Medium | Multi-host |
+| 31 | Persistence – Local Account Creation | T1136.001 | Critical | Multi-host |
+| 32 | Collection – Sensitive File Access | T1005 | Critical | as-srv |
+| 33 | Collection – Document Interaction Evidence | T1005 | High | as-srv |
+| 34 | Collection – Network Share Access | T1039 | Critical | as-pc2 |
+| 35 | Data Staging – Archive Creation | T1560.001 | Critical | as-srv |
+| 36 | Data Staging Artifact Identification | T1074 | High | as-srv |
+| 37 | Defense Evasion – Log Clearing | T1070.001 | Critical | as-pc1 |
+| 38 | Defense Evasion – Reflective Code Loading | T1620 | Critical | Multi-host |
+| 39 | Credential Access – Browser Credential Theft | T1555.003 | Critical | Multi-host |
+| 40 | Defense Evasion – Process Injection | T1055 | Critical | Multi-host |
+
+---
+
+## 🔥 Executive MITRE ATT&CK Heatmap
+
+| ATT&CK Phase | Techniques Observed | Severity | Analyst Notes |
+|-------------|--------------------|----------|---------------|
+| Initial Access | Phishing Execution (T1566), User Execution (T1204) | 🔴 Critical | Double-extension phishing payload executed by user |
+| Execution | Native Binary Abuse, LOLBins | 🔴 Critical | Payload leveraged trusted Windows processes |
+| Persistence | Remote Access Tooling (T1219), Scheduled Tasks (T1053.005), Account Creation (T1136) | 🔴 Critical | Layered persistence across multiple hosts |
+| Privilege Escalation | Valid Account Abuse (T1078) | 🟠 High | Credential reuse enabled expanded access |
+| Defense Evasion | Log Clearing (T1070.001), Masquerading (T1036), Reflective Loading (T1620) | 🔴 Critical | Strong evidence of anti-forensics and fileless execution |
+| Credential Access | Registry Hive Dumping (T1003), Browser Credential Theft (T1555.003) | 🔴 Critical | Combination of offline dumping and in-memory theft |
+| Discovery | User Discovery (T1033), Share Enumeration (T1135) | 🟠 High | Systematic reconnaissance using native tools |
+| Lateral Movement | Remote Services (T1021), RDP Pivoting | 🔴 Critical | Multi-method lateral movement including interactive RDP |
+| Collection | Sensitive File Access (T1005), Network Share Collection (T1039) | 🔴 Critical | Financial data targeted on internal file server |
+| Command & Control | Application Layer Protocol (T1071) | 🔴 High | Outbound communication with attacker infrastructure |
+| Exfiltration Prep | Archive Staging (T1560), Data Bundling | 🟠 High | Compressed archive staged prior to potential exfiltration |
+| Fileless Activity | Reflective Loading + GhostPack Tooling | 🔴 Critical | SharpChrome executed in-memory via process injection |
+
+
