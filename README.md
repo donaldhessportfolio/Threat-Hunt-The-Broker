@@ -2,7 +2,7 @@
 
 <p align="center">
   <img
-    src="PASTE_YOUR_ALERT_IMAGE_LINK_HERE"
+    src="images/Screenshot 2026-02-23 173753.png"
     width="1200"
     alt="Triggering Security Alert"
   />
