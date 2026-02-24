@@ -126,7 +126,7 @@ All findings were derived from Defender Advanced Hunting telemetry without relia
 - [🔥 Executive MITRE ATT&CK Heatmap](#executive-mitre-attck-heatmap)
 - [📊 Executive Takeaway](#executive-takeaway)
 - [🔍 Flag Analysis](#flag-analysis)
-- [🚨 Detection Gaps & Recommendations](#detection-gaps--recommendations)
+- [🚨 Detection Gaps & Recommendations](#detection-gaps-recommendations)
 
 ---
 
