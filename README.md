@@ -1,11 +1,7 @@
-# Threat Hunt "The Broker"
+# Threat Hunt: The Broker
 
 <p align="center">
-  <img
-    src="images/Initial Alert.png"
-    width="1200"
-    alt="Triggering Security Alert"
-  />
+  <img src="images/The Broker.png" width="1000" alt="Threat Hunt The Broker Banner">
 </p>
 
 # 🛡️ Threat Hunt Report – Hands-On-Keyboard Intrusion Reconstruction
@@ -31,6 +27,10 @@ The alert highlighted suspicious interactive behavior tied to a legitimate user 
 While the alert alone did not reveal the full scope of the intrusion, it provided a critical starting point for deeper investigation and full attack lifecycle reconstruction.
 
 This report expands that initial signal into a complete forensic timeline, uncovering the attacker’s entry vector, persistence mechanisms, lateral movement patterns, and in-memory credential theft activity.
+
+<p align="center">
+  <img src="images/Initial Alert.png" width="900" alt="Initial Microsoft Defender Alert">
+</p>
 
 ---
 
