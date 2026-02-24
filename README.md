@@ -130,6 +130,7 @@ All findings were derived from Defender Advanced Hunting telemetry without relia
 
 ---
 
+<a id="hunt-overview"></a>
 ## 🧠 Hunt Overview
 
 This threat hunt reconstructed a full-spectrum hands-on-keyboard intrusion beginning with a phishing-based endpoint compromise and evolving into a multi-host attack involving credential theft, persistence hardening, lateral movement, and fileless in-memory exploitation.
@@ -198,6 +199,7 @@ The investigation highlights the importance of correlating endpoint, identity, a
 
 ---
 
+<a id="mitre-attck-summary"></a>
 ## 🧬 MITRE ATT&CK Summary
 
 | Flag | Technique Category | MITRE ID | Priority | System |
@@ -245,6 +247,7 @@ The investigation highlights the importance of correlating endpoint, identity, a
 
 ---
 
+<a id="executive-mitre-attck-heatmap"></a>
 ## 🔥 Executive MITRE ATT&CK Heatmap
 
 | ATT&CK Phase | Techniques Observed | Severity | Analyst Notes |
@@ -264,6 +267,7 @@ The investigation highlights the importance of correlating endpoint, identity, a
 
 ---
 
+<a id="executive-takeaway"></a>
 ## 📊 Executive Takeaway
 
 This intrusion represents a multi-stage hands-on-keyboard compromise combining phishing-based initial access, layered persistence, credential theft, and fileless in-memory exploitation across multiple hosts.
@@ -301,6 +305,7 @@ Early detection of persistence layering and fileless execution is critical to di
 
 ---
 
+<a id="flag-analysis"></a>
 ## 🔍 Flag Analysis
 
 _All flags below are collapsible for readability._
@@ -2307,6 +2312,7 @@ DeviceEvents
 
 </details>
 
+<a id="detection-gaps-recommendations"></a>
 ## 🚨 Detection Gaps & Recommendations
 
 ### Observed Gaps
