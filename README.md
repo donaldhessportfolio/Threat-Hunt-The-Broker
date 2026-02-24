@@ -125,7 +125,6 @@ All findings were derived from Defender Advanced Hunting telemetry without relia
 - [🧬 MITRE ATT&CK Summary](#-mitre-attck-summary)
 - [🔥 Executive MITRE ATT&CK Heatmap](#-executive-mitre-attck-heatmap)
 - [📊 Executive Takeaway](#-executive-takeaway)
-- [⏱️ Attack Timeline](#️-attack-timeline)
 - [🔍 Flag Analysis](#-flag-analysis)
   - Phase 1: Initial Access & Execution (Flags 1–5)
   - Phase 2: Command & Control Infrastructure (Flags 6–8)
@@ -314,40 +313,173 @@ Early detection of persistence layering and fileless execution is critical to di
 
 ---
 
-## ⏱️ Attack Timeline
+## 🔍 Flag Analysis
+<details>
+<summary><strong>🚩 Flag 1: First Malicious Filename</strong></summary>
 
-### January 15, 2026 — Initial Compromise
-**~05:08 UTC** — Phishing payload executed on as-pc1 (daniel_richardson_cv.pdf.exe)  
-**~05:10 UTC** — Windows logs cleared via wevtutil (anti-forensics)  
-**Early post-execution** — Outbound connections to attacker infrastructure established
+### 🎯 Objective  
+Identify the earliest attacker activity and associated payload filename.
 
-### Post-Exploitation
-**Credential harvesting** — SAM and SYSTEM registry hives dumped and staged locally  
-**Reconnaissance** — whoami, net view, and privilege discovery commands executed
+---
 
-### Persistence Establishment
-**Remote access deployed** — AnyDesk installed with unattended access  
-**Persistence layering** — Scheduled tasks, masqueraded binaries, account manipulation observed
+### 📌 Finding  
+Process telemetry on **as-pc1** revealed repeated log clearing using `wevtutil.exe`.  
+Process lineage analysis showed the same parent executable across all events, identifying the initial phishing payload responsible for the compromise.
 
-### Lateral Movement
-**Failed attempts** — PsExec and WMIC used during early pivots  
-**Successful pivot** — Interactive RDP (mstsc.exe) enabled multi-host access  
-**Expansion** — Persistence observed across as-pc1, as-pc2, and as-srv
+---
 
-### Data Collection
-**Server access** — Internal file server compromised  
-**Sensitive interaction** — Financial documents accessed and edited  
-**Attribution** — SMB telemetry ties access to as-pc2
+### 🔍 Evidence
 
-### Staging Phase
-**Archive creation** — Shares.7z created on file server  
-**Artifact hashing** — Unique SHA256 identified for staged data
+| Field | Value |
+|------|------|
+| Host | as-pc1 |
+| Timestamp (UTC) | 2026-01-15 05:07:59 |
+| FileName | wevtutil.exe |
+| Command | wevtutil.exe cl Security |
+| Parent Process | daniel_richardson_cv.pdf.exe |
 
-### Advanced Tradecraft
-**Reflective loading detected** — ClrUnbackedModuleLoaded telemetry observed  
-**Fileless credential theft** — GhostPack SharpChrome executed in memory  
-**Process injection** — SharpChrome injected into notepad.exe
+---
 
-**Investigation Window:** January 15, 2026 – February 23, 2026
+### 🧠 Query
+```kql
+let t_utc = datetime(2026-01-15 05:08:27);
+DeviceProcessEvents
+| where DeviceName =~ "as-pc1"
+| where TimeGenerated between (t_utc-2m .. t_utc+2m)
+| where FileName !in~ ("RuntimeBroker.exe","backgroundTaskHost.exe","smartscreen.exe","ms-teamsupdate.exe","MusNotifyIcon.exe","conhost.exe")
+| sort by TimeGenerated asc
+| take 5
+| project TimeGenerated, FileName, ProcessCommandLine, InitiatingProcessFileName
+```
+</details>
+
+---
+<details>
+<summary><strong>🚩 Flag 2: Initial Payload SHA256</strong></summary>
+
+### 🎯 Objective  
+Identify the SHA256 hash of the initial phishing payload.
+
+---
+
+### 📌 Finding  
+Process telemetry tied to the initial compromise window on **as-pc1** revealed the SHA256 hash of the phishing payload. The hash was extracted directly from Defender process metadata associated with the earliest execution of the malicious file.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Host | as-pc1 |
+| Timestamp (UTC) | 2026-01-15 05:07:59 |
+| Payload | daniel_richardson_cv.pdf.exe |
+| Hash Field | InitiatingProcessSHA256 |
+| SHA256 | 48b97fd91946e81e3e7742b3554585360551551cbf9398e1f34f4bc4eac3a6b5 |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15 05:05:00);
+let end   = datetime(2026-01-15 05:12:00);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where ProcessCommandLine has "daniel_richardson_cv.pdf.exe"
+   or InitiatingProcessCommandLine has "daniel_richardson_cv.pdf.exe"
+   or FileName has "daniel_richardson"
+| project Timestamp, FileName, ProcessCommandLine, SHA256, InitiatingProcessFileName, InitiatingProcessSHA256
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 3: User Interaction (Execution Method)</strong></summary>
+
+### 🎯 Objective  
+Determine how the payload was initially launched by identifying the parent process that indicates the method of execution.
+
+---
+
+### 📌 Finding  
+Process execution on **as-pc1** showed multiple downstream utilities spawned under the malicious payload `daniel_richardson_cv.pdf.exe`. While the *direct* parent process for the initial launch wasn’t explicitly captured, the execution pattern is consistent with **user-driven execution (double-click)** which maps to the Windows shell process **explorer.exe**.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Host | as-pc1 |
+| Timestamp (UTC) | 2026-01-15T03:59:07.1340052Z |
+| FileName | HOSTNAME.EXE |
+| ProcessCommandLine | hostname.exe |
+| InitiatingProcessFileName | daniel_richardson_cv.pdf.exe |
+| InitiatingProcessCommandLine | "Daniel_Richardson_CV.pdf.exe" |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15 00:00:00);
+let end   = datetime(2026-01-23 23:59:59);
+DeviceProcessEvents
+| where DeviceName =~ "as-pc1"
+| where Timestamp between (start .. end)
+| where InitiatingProcessFileName =~ "daniel_richardson_cv.pdf.exe"
+| project Timestamp, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 4: System Reconnaissance Initiation</strong></summary>
+
+### 🎯 Objective  
+Identify the first reconnaissance command executed by the payload.
+
+---
+
+### 📌 Finding  
+Early post-execution telemetry on **as-pc1** showed the payload spawning native discovery utilities. The earliest confirmed reconnaissance activity was the execution of `whoami.exe`, indicating the attacker began enumerating the current user context immediately after gaining execution.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Host | as-pc1 |
+| Timestamp (UTC) | 2026-01-15T03:58:55.6568735Z |
+| FileName | whoami.exe |
+| ProcessCommandLine | whoami.exe |
+| InitiatingProcessFileName | daniel_richardson_cv.pdf.exe |
+| InitiatingProcessCommandLine | "Daniel_Richardson_CV.pdf.exe" |
+
+---
+
+### 🧠 Query
+```kql
+DeviceProcessEvents
+| where DeviceName =~ "as-pc1"
+| where InitiatingProcessFileName =~ "daniel_richardson_cv.pdf.exe"
+| where FileName =~ "whoami.exe"
+| project Timestamp,
+          FileName,
+          ProcessCommandLine,
+          InitiatingProcessFileName,
+          InitiatingProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
 
 
