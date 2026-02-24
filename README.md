@@ -472,5 +472,91 @@ DeviceProcessEvents
 
 </details>
 
+---
+
+<details>
+<summary><strong>🚩 Flag 5: Spawned Child Process (Notepad Execution)</strong></summary>
+
+### 🎯 Objective  
+Identify a legitimate Windows process spawned directly by the payload and recover its execution context.
+
+---
+
+### 📌 Finding  
+Process telemetry on **as-pc1** revealed multiple native Windows binaries spawned by the malicious payload. Among these, **notepad.exe** was identified as a child process directly initiated by `daniel_richardson_cv.pdf.exe`.
+
+Inspection of process metadata confirmed that Notepad was executed without additional arguments, indicating simple execution of a benign application as part of the payload’s activity chain.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Host | as-pc1 |
+| Timestamp (UTC) | 2026-01-15T05:09:53.3995975Z |
+| FileName | notepad.exe |
+| ProcessCommandLine | notepad.exe "" |
+| InitiatingProcessCommandLine | "Daniel_Richardson_CV.pdf.exe" |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName =~ "as-pc1"
+| where InitiatingProcessFileName =~ "daniel_richardson_cv.pdf.exe"
+| project Timestamp, FileName, ProcessCommandLine,
+          InitiatingProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 6: Initial External Network Connection</strong></summary>
+
+### 🎯 Objective  
+Identify the first external network connection made by the payload.
+
+---
+
+### 📌 Finding  
+Network telemetry revealed that the payload established an outbound connection shortly after execution on **as-pc1**. The earliest confirmed connection was made to the external domain **cdn.cloud-endpoint.net** over HTTPS, indicating potential command-and-control (C2) communication or payload staging activity.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Host | as-pc1 |
+| Timestamp (UTC) | 2026-01-15T03:47:10.786699Z |
+| RemoteUrl | cdn.cloud-endpoint.net |
+| RemoteIP | 104.21.30.237 |
+| RemotePort | 443 |
+| InitiatingProcessFileName | daniel_richardson_cv.pdf.exe |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceNetworkEvents
+| where Timestamp between (start .. end)
+| where DeviceName =~ "as-pc1"
+| where InitiatingProcessFileName =~ "daniel_richardson_cv.pdf.exe"
+| project Timestamp, RemoteUrl, RemoteIP, RemotePort, InitiatingProcessFileName
+| order by Timestamp asc
+```
+
+</details>
+
 
 
